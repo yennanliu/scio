@@ -1,6 +1,6 @@
 #!/bin/sh
 
-DURATION=300
+DURATION=180
 
 sbt -Dscio.version=0.5.4 -Dbeam.version=2.4.0 pack
 
@@ -8,7 +8,7 @@ micro_bench() {
     NAME=$1
     echo "Running $NAME"
     time java -agentpath:./liblagent.so \
-        -Xms8g -Xmx8g -cp "target/pack/lib/*" com.spotify.MicroBench \
+        -Xms32g -Xmx32g -cp "target/pack/lib/*" com.spotify.MicroBench \
         --duration=$DURATION \
         --name=$NAME
 

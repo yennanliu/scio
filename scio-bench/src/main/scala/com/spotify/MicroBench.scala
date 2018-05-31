@@ -19,21 +19,23 @@ package com.spotify
 
 import com.spotify.scio._
 import com.spotify.scio.values.SCollection
+import org.apache.beam.sdk.io.GenerateSequence
 import org.apache.beam.sdk.transforms.DoFn.ProcessElement
 import org.apache.beam.sdk.transforms.{DoFn, ParDo}
+import org.joda.time.Duration
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 object MicroBench {
 
-  def main(cmdlineArgs: Array[String]): Unit = {
-    val defaultDuration = 300
+  private var duration: Int = 0
 
+  def main(cmdlineArgs: Array[String]): Unit = {
     val (sc, args) = ContextAndArgs(cmdlineArgs)
 
+    duration = args.int("duration")
     val name = args("name")
-    val duration = args.int("duration", defaultDuration)
     val cls = Class.forName(s"com.spotify.$name")
 
     cls.newInstance().asInstanceOf[MicroBench].run(sc)
@@ -47,17 +49,11 @@ trait MicroBench {
   def run(sc: ScioContext): Unit
 
   implicit class RichScioContext(val self: ScioContext) {
-    def inf: SCollection[Int] = {
-      self.parallelize(1 to Runtime.getRuntime.availableProcessors())
-        .applyTransform(ParDo.of(new DoFn[Int, Int] {
-          @ProcessElement
-          private[spotify] def processElement(ctx: DoFn[Int, Int]#ProcessContext): Unit = {
-            while (true) {
-              Thread.sleep(1)
-              ctx.output(ctx.element())
-            }
-          }
-        }))
+    def inf: SCollection[Long] = {
+      val t = GenerateSequence
+        .from(0)
+        .withMaxReadTime(Duration.standardSeconds(MicroBench.duration))
+      self.customInput("sequence", t).asInstanceOf[SCollection[Long]]
     }
   }
 
