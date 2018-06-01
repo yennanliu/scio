@@ -22,13 +22,9 @@ import com.spotify.scio.values.SCollection
 import org.apache.beam.sdk.io.GenerateSequence
 
 object MicroBench {
-
-  private var duration: Int = 0
-
   def main(cmdlineArgs: Array[String]): Unit = {
     val (sc, args) = ContextAndArgs(cmdlineArgs)
 
-    duration = args.int("duration")
     val name = args("name")
     val cls = Class.forName(s"com.spotify.$name")
 
@@ -44,7 +40,7 @@ trait MicroBench {
     def seq: SCollection[Long] = {
       val t = GenerateSequence
         .from(0)
-        .to(1000000 * 100)
+        .to(1000000 * 20)
       self.customInput("sequence", t).asInstanceOf[SCollection[Long]]
     }
   }
