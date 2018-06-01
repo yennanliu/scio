@@ -20,12 +20,6 @@ package com.spotify
 import com.spotify.scio._
 import com.spotify.scio.values.SCollection
 import org.apache.beam.sdk.io.GenerateSequence
-import org.apache.beam.sdk.transforms.DoFn.ProcessElement
-import org.apache.beam.sdk.transforms.{DoFn, ParDo}
-import org.joda.time.Duration
-
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 
 object MicroBench {
 
@@ -39,9 +33,7 @@ object MicroBench {
     val cls = Class.forName(s"com.spotify.$name")
 
     cls.newInstance().asInstanceOf[MicroBench].run(sc)
-    Future(sc.close())
-    Thread.sleep(duration * 1000)
-    sys.runtime.halt(0)
+    sc.close()
   }
 }
 
@@ -49,35 +41,23 @@ trait MicroBench {
   def run(sc: ScioContext): Unit
 
   implicit class RichScioContext(val self: ScioContext) {
-    def inf: SCollection[Long] = {
+    def seq: SCollection[Long] = {
       val t = GenerateSequence
         .from(0)
-        .withMaxReadTime(Duration.standardSeconds(MicroBench.duration))
+        .to(1000000 * 100)
       self.customInput("sequence", t).asInstanceOf[SCollection[Long]]
-    }
-  }
-
-  implicit class RichSCollection[T](val self: SCollection[T]) {
-    def blackhole: Unit = {
-      implicit val ct = self.ct
-      self.applyTransform(ParDo.of(new DoFn[T, T] {
-        @ProcessElement
-        private[spotify] def processElement(ctx: DoFn[T, T]#ProcessContext): Unit = {
-          ctx.element()
-        }
-      }))
     }
   }
 }
 
 class MapMicroBench extends MicroBench {
-  override def run(sc: ScioContext): Unit = sc.inf.map(identity).blackhole
+  override def run(sc: ScioContext): Unit = sc.seq.map(identity)
 }
 
 class FlatMapMicroBench extends MicroBench {
-  override def run(sc: ScioContext): Unit = sc.inf.flatMap(Seq(_)).blackhole
+  override def run(sc: ScioContext): Unit = sc.seq.flatMap(Seq(_))
 }
 
 class FilterMicroBench extends MicroBench {
-  override def run(sc: ScioContext): Unit = sc.inf.filter(_ % 2 == 0).blackhole
+  override def run(sc: ScioContext): Unit = sc.seq.filter(_ % 2 == 0)
 }
