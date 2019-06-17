@@ -314,6 +314,7 @@ lazy val root: Project = Project("scio", file("."))
     scioElasticsearch2,
     scioElasticsearch5,
     scioElasticsearch6,
+    scioEstimation,
     scioExtra,
     scioJdbc,
     scioParquet,
@@ -575,6 +576,22 @@ lazy val scioElasticsearch6: Project = Project(
     scioCore,
     scioTest % "test"
   )
+
+lazy val scioEstimation: Project = Project(
+  "scio-estimation",
+  file("scio-estimation")
+).settings(
+    commonSettings ++ itSettings,
+    description := "Scio add-on for data size estimation"
+  )
+  .dependsOn(
+    scioCore,
+    scioTest % "it->it;test->test",
+    scioAvro,
+    scioBigQuery,
+    scioMacros
+  )
+  .configs(IntegrationTest)
 
 lazy val scioExtra: Project = Project(
   "scio-extra",
