@@ -337,6 +337,7 @@ lazy val scioCore: Project = Project(
       (baseDirectory in ThisBuild).value / "version.sbt"
     ),
     libraryDependencies ++= Seq(
+      "com.duprasville.guava.guava-probably" % "guava-probably" % "1.0-SNAPSHOT",
       "org.apache.beam" % "beam-sdks-java-core" % beamVersion,
       "org.apache.beam" % "beam-sdks-java-io-google-cloud-platform" % beamVersion,
       "org.apache.beam" % "beam-runners-google-cloud-dataflow-java" % beamVersion % Provided,
