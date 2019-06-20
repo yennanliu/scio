@@ -23,7 +23,7 @@ object FilterBenchmark {
     val h = BloomFilter.optimalNumHashes(n, w)
     import com.twitter.algebird.Hash128.stringHash
     var f = BloomFilterMonoid(h, w).zero
-    println(f)
+    println(s"$f width=$w numHashes=$h")
 
     val buildStart = System.currentTimeMillis()
     var i = 0
