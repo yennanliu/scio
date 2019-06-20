@@ -216,6 +216,11 @@ public final class CuckooFilter<E> implements ProbabilisticFilter<E>, Serializab
     return cuckooStrategy.add(e, funnel, table);
   }
 
+  public boolean add(long[] prehash) {
+    checkNotNull(prehash);
+    return cuckooStrategy.add(prehash, table);
+  }
+
   /**
    * Combines {@code this} filter with another compatible filter. The mutations happen to {@code
    * this} instance. Callers must ensure {@code this} filter is appropriately sized to avoid
@@ -590,7 +595,7 @@ public final class CuckooFilter<E> implements ProbabilisticFilter<E>, Serializab
    * @return optimal number of entries per bucket
    */
   @VisibleForTesting
-  static int optimalEntriesPerBucket(double e) {
+  public static int optimalEntriesPerBucket(double e) {
     checkArgument(e > 0.0D, "e must be > 0.0");
     if (e <= 0.00001) {
       return MAX_ENTRIES_PER_BUCKET;
@@ -633,7 +638,7 @@ public final class CuckooFilter<E> implements ProbabilisticFilter<E>, Serializab
    * @return number of bits per entry
    */
   @VisibleForTesting
-  static int optimalBitsPerEntry(double e, int b) {
+  public static int optimalBitsPerEntry(double e, int b) {
     checkArgument(e >= MIN_FPP, "Cannot create CuckooFilter with FPP[" + e +
         "] < CuckooFilter.MIN_FPP[" + CuckooFilter.MIN_FPP + "]");
     return log2(2 * b / e, HALF_DOWN);
@@ -648,7 +653,7 @@ public final class CuckooFilter<E> implements ProbabilisticFilter<E>, Serializab
    * @return number of buckets
    */
   @VisibleForTesting
-  static long optimalNumberOfBuckets(long n, int b) {
+  public static long optimalNumberOfBuckets(long n, int b) {
     checkArgument(n > 0, "n must be > 0");
     return evenCeil(divide((long) ceil(n / optimalLoadFactor(b)), b, CEILING));
   }

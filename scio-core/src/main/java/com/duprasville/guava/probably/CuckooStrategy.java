@@ -18,8 +18,10 @@ import com.google.common.hash.Funnel;
 
 import java.io.Serializable;
 
-interface CuckooStrategy extends Serializable {
+public interface CuckooStrategy extends Serializable {
   int ordinal();
+  <T> long[] prehash(T object, Funnel <? super T> funnel, long numBuckets, int numBitsPerEntry);
+  boolean add(long[] prehash, CuckooTable table);
   <T> boolean add(T object, Funnel<? super T> funnel, CuckooTable table);
   <T> boolean remove(T object, Funnel<? super T> funnel, CuckooTable table);
   <T> boolean contains(T object, Funnel<? super T> funnel, CuckooTable table);
