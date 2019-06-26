@@ -610,6 +610,7 @@ lazy val scioExtra: Project = Project(
       "com.spotify.sparkey" % "sparkey" % sparkeyVersion,
       "com.twitter" %% "algebird-core" % algebirdVersion,
       "info.debatty" % "java-lsh" % javaLshVersion,
+      "net.jpountz.lz4" % "lz4" % "1.3.0",
       "net.pishen" %% "annoy4s" % annoy4sVersion,
       "org.scalanlp" %% "breeze" % breezeVersion,
       "org.scalatest" %% "scalatest" % scalatestVersion % "test",
