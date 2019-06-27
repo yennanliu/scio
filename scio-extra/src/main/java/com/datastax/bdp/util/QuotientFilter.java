@@ -72,6 +72,29 @@ public class QuotientFilter implements Iterable<Long> {
     boolean overflowed = false;
     long entries;
 
+    public long capacity() {
+        return MAX_INSERTIONS;
+    }
+
+    public long size() {
+        return entries;
+    }
+
+    public long bytes() {
+        /*
+        1 int quotientBites
+        1 int remainderBits
+        1 boolean overflowed
+        1 long entries
+        1 long[] table
+         */
+        return 2 * Integer.BYTES + 1 + (1 + table.length) * Long.BYTES;
+    }
+
+    public double fpp() {
+        return Math.pow(2, -REMAINDER_BITS);
+    }
+
     static long LOW_MASK(long n) {
         return (1L << n) - 1L;
     }
@@ -119,6 +142,15 @@ public class QuotientFilter implements Iterable<Long> {
         remainderBits -= quotientBits;
 
         return new QuotientFilter(quotientBits, remainderBits);
+    }
+
+    public static QuotientFilter create(long capacity, double fpp) {
+        int p = bitsForNumElementsWithLoadFactor((long) (capacity / 0.75));
+        int r = (int) Math.ceil(-(Math.log(fpp) / Math.log(2.0)));
+
+        int q = Math.max(p - r, 1);
+        System.out.printf("%d %d %d\n", p, q, r);
+        return new QuotientFilter(q, r);
     }
 
     public QuotientFilter(int quotientBits, int remainderBits) {
@@ -299,6 +331,12 @@ public class QuotientFilter implements Iterable<Long> {
         insert(hashFactory.hash64().hash(data, offset, length, 0));
     }
 
+    public void add(byte[] data) {
+        Preconditions.checkState(entries < MAX_INSERTIONS, "Filter saturated");
+        Preconditions.checkState(!overflowed, "Filter overflowed");
+        insert(data);
+    }
+
     public void insert(long hash) {
         if (entries >= MAX_INSERTIONS | overflowed) {
             //Can't safely process an after overflow
@@ -382,6 +420,10 @@ public class QuotientFilter implements Iterable<Long> {
         if (qf.entries != entries) {
             throw new AssertionError();
         }
+    }
+
+    public boolean maybeContains(byte[] data) {
+        return maybeContains(hashFactory.hash64().hash(data, 0, data.length, 0));
     }
 
     public boolean maybeContains(long hash) {
