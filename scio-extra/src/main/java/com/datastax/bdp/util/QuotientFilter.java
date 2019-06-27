@@ -145,11 +145,9 @@ public class QuotientFilter implements Iterable<Long> {
     }
 
     public static QuotientFilter create(long capacity, double fpp) {
-        int p = bitsForNumElementsWithLoadFactor((long) (capacity / 0.75));
+        int q = bitsForNumElementsWithLoadFactor((long) (capacity / 0.75));
         int r = (int) Math.ceil(-(Math.log(fpp) / Math.log(2.0)));
 
-        int q = Math.max(p - r, 1);
-        System.out.printf("%d %d %d\n", p, q, r);
         return new QuotientFilter(q, r);
     }
 

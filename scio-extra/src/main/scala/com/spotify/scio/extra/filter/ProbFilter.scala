@@ -16,6 +16,9 @@
  */
 package com.spotify.scio.extra.filter
 
+import java.nio.charset.Charset
+
+import com.datastax.bdp.util.{QuotientFilter => JQF}
 import com.duprasville.guava.probably.{CuckooFilter => JCF}
 import com.google.common.base.Charsets
 import com.google.common.hash.{Funnel, Funnels}
@@ -67,22 +70,21 @@ trait ProbFilterCompanion[PF[T] <: ProbFilter[T]] {
   def coder[T]: Coder[PF[T]]
 }
 
-trait Hash[T] {
-  val forAlgebird: Hash128[T]
-  val forGuava: Funnel[T]
-}
+case class Hash[T](algebird: Hash128[T], guava: Funnel[T], toBytes: T => Array[Byte])
 
 object Hash {
-  private def hash[T](algebird: Hash128[T], guava: Funnel[_]): Hash[T] = new Hash[T] {
-    override val forAlgebird: Hash128[T] = algebird
-    override val forGuava: Funnel[T] = guava.asInstanceOf[Funnel[T]]
-  }
-
-  implicit val intHash: Hash[Int] = hash(Hash128.intHash, Funnels.integerFunnel())
-  implicit val longHash: Hash[Long] = hash(Hash128.longHash, Funnels.longFunnel())
-  implicit val bytesHash: Hash[Array[Byte]] = hash(Hash128.arrayByteHash, Funnels.byteArrayFunnel())
+  implicit val intHash: Hash[Int] =
+    Hash(Hash128.intHash, Funnels.integerFunnel().asInstanceOf[Funnel[Int]], null)
+  implicit val longHash: Hash[Long] =
+    Hash(Hash128.longHash, Funnels.longFunnel().asInstanceOf[Funnel[Long]], null)
+  implicit val bytesHash: Hash[Array[Byte]] =
+    Hash(Hash128.arrayByteHash, Funnels.byteArrayFunnel(), null)
   implicit val stringHash: Hash[String] =
-    hash(Hash128.stringHash, Funnels.stringFunnel(Charsets.UTF_8))
+    Hash(
+      Hash128.stringHash,
+      Funnels.stringFunnel(Charsets.UTF_8).asInstanceOf[Funnel[String]],
+      _.getBytes(Charset.defaultCharset())
+    )
 }
 
 /**
@@ -104,7 +106,7 @@ object CuckooFilter extends ProbFilterCompanion[CuckooFilter] {
   override def builder(capacity: Long, fpp: Double): ProbFilterBuilder[CuckooFilter] =
     new ProbFilterBuilder[CuckooFilter] {
       override def build[T](data: Iterable[T])(implicit hash: Hash[T]): CuckooFilter[T] = {
-        val cf = JCF.create(hash.forGuava, capacity, fpp)
+        val cf = JCF.create(hash.guava, capacity, fpp)
         data.foreach { i =>
           require(cf.add(i), s"Failed to add item at size ${cf.sizeLong()}")
         }
@@ -119,7 +121,7 @@ object TwoSidedCuckooFilter extends ProbFilterCompanion[TwoSidedCuckooFilter] {
   override def builder(capacity: Long, fpp: Double): ProbFilterBuilder[TwoSidedCuckooFilter] =
     new ProbFilterBuilder[TwoSidedCuckooFilter] {
       override def build[T](data: Iterable[T])(implicit hash: Hash[T]): TwoSidedCuckooFilter[T] = {
-        val cf = JCF.create(hash.forGuava, capacity, fpp)
+        val cf = JCF.create(hash.guava, capacity, fpp)
         var failures = 0
         data.foreach { i =>
           if (!cf.add(i)) {
@@ -153,7 +155,7 @@ object OneSidedCuckooFilter extends ProbFilterCompanion[OneSidedCuckooFilter] {
   override def builder(capacity: Long, fpp: Double): ProbFilterBuilder[OneSidedCuckooFilter] =
     new ProbFilterBuilder[OneSidedCuckooFilter] {
       override def build[T](data: Iterable[T])(implicit hash: Hash[T]): OneSidedCuckooFilter[T] = {
-        val cf = JCF.create(hash.forGuava, capacity, fpp)
+        val cf = JCF.create(hash.guava, capacity, fpp)
         val b = Set.newBuilder[T]
         data.foreach { i =>
           if (!cf.add(i)) {
@@ -165,7 +167,7 @@ object OneSidedCuckooFilter extends ProbFilterCompanion[OneSidedCuckooFilter] {
         val overflow = if (failures.isEmpty) {
           None
         } else {
-          val f = JCF.create(hash.forGuava, (failures.size * 1.2).toLong, fpp)
+          val f = JCF.create(hash.guava, (failures.size * 1.2).toLong, fpp)
           failures.foreach(i => assert(f.add(i), "Failed to add to overflow CuckooFilter"))
           Some(f)
         }
@@ -193,6 +195,29 @@ case class OneSidedCuckooFilter[T](cf: JCF[T], overflow: Option[JCF[T]]) extends
   override def contains(item: T): Boolean = cf.contains(item) || overflow.exists(_.contains(item))
 }
 
+object QuotientFilter extends ProbFilterCompanion[QuotientFilter] {
+  override def builder(capacity: Long, fpp: Double): ProbFilterBuilder[QuotientFilter] =
+    new ProbFilterBuilder[QuotientFilter] {
+      override def build[T](data: Iterable[T])(implicit hash: Hash[T]): QuotientFilter[T] = {
+        val qf = JQF.create(capacity, fpp)
+        data.foreach(i => qf.add(hash.toBytes(i)))
+        QuotientFilter(qf, hash.toBytes)
+      }
+    }
+
+  override def coder[T]: Coder[QuotientFilter[T]] = ???
+}
+
+case class QuotientFilter[T](qf: JQF, toBytes: T => Array[Byte]) extends ProbFilter[T] {
+  override val capacity: Long = qf.capacity()
+  override val size: Long = qf.size()
+  override val bytes: Long = qf.bytes()
+  override val fpp: Double = qf.fpp()
+  override val fnp: Double = 0.0
+
+  override def contains(item: T): Boolean = qf.maybeContains(toBytes(item))
+}
+
 // scalastyle:off
 object ProbFilterTest {
   private val targetCapacity = 100
@@ -201,7 +226,7 @@ object ProbFilterTest {
   def test[PF[T] <: ProbFilter[T]](b: ProbFilterBuilder[PF]): Unit = {
     val data = (1 to targetCapacity).map(_.toString)
     val f = b.build(data)
-    println("=" * 100)
+    println("=" * 50)
     println(s"Testing ${f.getClass.getSimpleName}")
     println(s"target capacity=$targetCapacity")
     println(s"target fpp=$targetFpp")
@@ -233,5 +258,6 @@ object ProbFilterTest {
     test(CuckooFilter.builder(targetCapacity, targetFpp))
     test(OneSidedCuckooFilter.builder(targetCapacity, targetFpp))
     test(TwoSidedCuckooFilter.builder(targetCapacity, targetFpp))
+    test(QuotientFilter.builder(targetCapacity, targetFpp))
   }
 }
