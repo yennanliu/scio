@@ -38,6 +38,22 @@ class CuckooStrategyMurmurBealDupras32 extends AbstractCuckooStrategy implements
     super(ordinal);
   }
 
+  public <T> CuckooHasher.Hash hash(T object, Funnel<? super T> funnel, CuckooTable table) {
+    final long hash64 = hash(object, funnel).asLong();
+    final int hash1 = hash1(hash64);
+    final int hash2 = hash2(hash64);
+    final int fingerprint = fingerprint(hash2, table.numBitsPerEntry);
+    final long index = index(hash1, table.numBuckets);
+    return new CuckooHasher.Hash(fingerprint, index);
+  }
+
+  public boolean add(CuckooHasher.Hash hash, CuckooTable table) {
+    final int fingerprint = hash.getFingerprint();
+    final long index = hash.getIndex();
+    return putEntry(fingerprint, table, index) ||
+        putEntry(fingerprint, table, altIndex(index, fingerprint, table.numBuckets));
+  }
+
   public <T> boolean add(T object, Funnel<? super T> funnel, CuckooTable table) {
     final long hash64 = hash(object, funnel).asLong();
     final int hash1 = hash1(hash64);

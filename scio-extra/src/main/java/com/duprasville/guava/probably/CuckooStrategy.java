@@ -20,6 +20,8 @@ import java.io.Serializable;
 
 interface CuckooStrategy extends Serializable {
   int ordinal();
+  <T> CuckooHasher.Hash hash(T object, Funnel<? super T> funnel, CuckooTable table);
+  boolean add(CuckooHasher.Hash hash, CuckooTable table);
   <T> boolean add(T object, Funnel<? super T> funnel, CuckooTable table);
   <T> boolean remove(T object, Funnel<? super T> funnel, CuckooTable table);
   <T> boolean contains(T object, Funnel<? super T> funnel, CuckooTable table);

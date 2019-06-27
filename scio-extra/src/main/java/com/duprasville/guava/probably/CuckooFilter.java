@@ -216,6 +216,11 @@ public final class CuckooFilter<E> implements ProbabilisticFilter<E>, Serializab
     return cuckooStrategy.add(e, funnel, table);
   }
 
+  public boolean add(CuckooHasher.Hash hash) {
+    checkNotNull(hash);
+    return cuckooStrategy.add(hash, table);
+  }
+
   /**
    * Combines {@code this} filter with another compatible filter. The mutations happen to {@code
    * this} instance. Callers must ensure {@code this} filter is appropriately sized to avoid
@@ -546,6 +551,25 @@ public final class CuckooFilter<E> implements ProbabilisticFilter<E>, Serializab
   @CheckReturnValue
   public static <T> CuckooFilter<T> create(Funnel<? super T> funnel, long capacity) {
     return create(funnel, capacity, 0.032D);
+  }
+
+  public static <T> CuckooHasher<T> createHasher(Funnel<? super T> funnel, long capacity, double fpp) {
+    checkNotNull(funnel);
+    checkArgument(capacity > 0, "Expected insertions (%s) must be > 0", capacity);
+    checkArgument(fpp > 0.0D, "False positive probability (%s) must be > 0.0", fpp);
+    checkArgument(fpp < 1.0D, "False positive probability (%s) must be < 1.0", fpp);
+
+    int numEntriesPerBucket = optimalEntriesPerBucket(fpp);
+    long numBuckets = optimalNumberOfBuckets(capacity, numEntriesPerBucket);
+    int numBitsPerEntry = optimalBitsPerEntry(fpp, numEntriesPerBucket);
+
+    return new CuckooHasher<>(
+        CuckooStrategies.MURMUR128_BEALDUPRAS_32.strategy(),
+        funnel, numBuckets, numEntriesPerBucket, numBitsPerEntry);
+  }
+
+  public static <T> CuckooHasher<T> createHasher(Funnel<? super T> funnel, long capacity) {
+    return createHasher(funnel, capacity, 0.032D);
   }
 
   /*
