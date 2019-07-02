@@ -68,8 +68,8 @@ object ProbFilterTest {
       test(BloomFilter.builder(cap, targetFpp), cap)
       test(GBloomFilter.builder(cap, targetFpp), cap)
       test(CuckooFilter.builder(cap, targetFpp), cap)
-      test(OneSidedCuckooFilter.builder(cap, targetFpp), cap)
-      test(TwoSidedCuckooFilter.builder(cap, targetFpp), cap)
+//      test(OneSidedCuckooFilter.builder(cap, targetFpp), cap)
+//      test(TwoSidedCuckooFilter.builder(cap, targetFpp), cap)
       test(QuotientFilter.builder(cap, targetFpp), cap)
     }
   }
