@@ -611,6 +611,7 @@ lazy val scioExtra: Project = Project(
       "com.twitter" %% "algebird-core" % algebirdVersion,
       "info.debatty" % "java-lsh" % javaLshVersion,
       "net.jpountz.lz4" % "lz4" % "1.3.0",
+      "com.github.mgunlogson" % "cuckoofilter4j" % "1.0.1",
       "net.pishen" %% "annoy4s" % annoy4sVersion,
       "org.scalanlp" %% "breeze" % breezeVersion,
       "org.scalatest" %% "scalatest" % scalatestVersion % "test",

@@ -181,6 +181,36 @@ object CuckooFilter extends ProbFilterCompanion[CuckooFilter] {
   override def coder[T]: Coder[CuckooFilter[T]] = ???
 }
 
+import com.github.mgunlogson.{cuckoofilter4j => c4j}
+
+case class CuckooFilter4J[T] private (cf: c4j.CuckooFilter[T]) extends ProbFilter[T] {
+  override val capacity: Long = cf.getActualCapacity
+  override val size: Long = cf.getCount
+  override val fpp: Double = -1.0
+  override val fnp: Double = 0.0
+  override val bytes: Long = -1
+
+  override def contains(item: T): Boolean = cf.mightContain(item)
+}
+
+object CuckooFilter4J extends ProbFilterCompanion[CuckooFilter4J] {
+  override def builder(capacity: Long, fpp: Double): ProbFilterBuilder[CuckooFilter4J] =
+    new ProbFilterBuilder[CuckooFilter4J] {
+      override def build[T](data: Iterable[T])(implicit hash: Hash[T]): CuckooFilter4J[T] = {
+        val cf = new c4j.CuckooFilter.Builder[T](hash.guava, capacity)
+          .withFalsePositiveRate(fpp)
+          .build()
+        data.foreach { i =>
+          //          require(cf.add(i), s"Failed to add item at size ${cf.sizeLong()}")
+          if (!cf.put(i)) println(s"Failed to add item at size ${cf.getCount()}")
+        }
+        CuckooFilter4J(cf)
+      }
+    }
+
+  override def coder[T]: Coder[CuckooFilter4J[T]] = ???
+}
+
 object TwoSidedCuckooFilter extends ProbFilterCompanion[TwoSidedCuckooFilter] {
   override def builder(capacity: Long, fpp: Double): ProbFilterBuilder[TwoSidedCuckooFilter] =
     new ProbFilterBuilder[TwoSidedCuckooFilter] {
