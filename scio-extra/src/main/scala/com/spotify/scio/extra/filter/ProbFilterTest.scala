@@ -65,12 +65,12 @@ object ProbFilterTest {
   def testFilters(): Unit = {
 //    for (cap <- Seq(1000, 100000, 10000000)) {
     for (cap <- Seq(1000000)) {
-//      test(BloomFilter.builder(cap, targetFpp), cap)
+      test(BloomFilter.builder(cap, targetFpp), cap)
       test(GBloomFilter.builder(cap, targetFpp), cap)
       test(CuckooFilter.builder(cap, targetFpp), cap)
 //      test(OneSidedCuckooFilter.builder(cap, targetFpp), cap)
 //      test(TwoSidedCuckooFilter.builder(cap, targetFpp), cap)
-//      test(QuotientFilter.builder(cap, targetFpp), cap)
+      test(QuotientFilter.builder(cap, targetFpp), cap)
     }
   }
 
