@@ -677,7 +677,8 @@ public final class CuckooFilter<E> implements ProbabilisticFilter<E>, Serializab
   static int optimalBitsPerEntry(double e, int b) {
     checkArgument(e >= MIN_FPP, "Cannot create CuckooFilter with FPP[" + e +
         "] < CuckooFilter.MIN_FPP[" + CuckooFilter.MIN_FPP + "]");
-    return log2(2 * b / e, HALF_DOWN);
+    //return log2(2 * b / e, HALF_DOWN);
+    return 8;
   }
 
   /**
@@ -711,7 +712,7 @@ public final class CuckooFilter<E> implements ProbabilisticFilter<E>, Serializab
   }
 
   private static class SerialForm<T> implements Serializable {
-    final long[] data;
+    final byte[] data;
     final long size;
     final long checksum;
     final long numBuckets;
@@ -813,9 +814,9 @@ public final class CuckooFilter<E> implements ProbabilisticFilter<E>, Serializab
       dataLength = din.readInt();
 
       CuckooStrategy cuckooStrategy = CuckooStrategies.values()[strategyOrdinal].strategy();
-      long[] data = new long[dataLength];
+      byte[] data = new byte[dataLength];
       for (int i = 0; i < data.length; i++) {
-        data[i] = din.readLong();
+        data[i] = din.readByte();
       }
       return new CuckooFilter<T>(
           new CuckooTable(data, size, checksum, numBuckets, numEntriesPerBucket, numBitsPerEntry),

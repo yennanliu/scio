@@ -29,7 +29,7 @@ import static java.lang.Math.pow;
 class CuckooTable {
   static final int EMPTY_ENTRY = 0x00;
 
-  public long[] data() {
+  public byte[] data() {
     return data;
   }
 
@@ -45,7 +45,7 @@ class CuckooTable {
     return numBitsPerEntry;
   }
 
-  final long[] data;
+  final byte[] data;
   final long numBuckets;
   final int numEntriesPerBucket;
   final int numBitsPerEntry;
@@ -53,7 +53,7 @@ class CuckooTable {
   private long checksum;
 
   public CuckooTable(long numBuckets, int numEntriesPerBucket, int numBitsPerEntry) {
-    this(new long[calculateDataLength(numBuckets, numEntriesPerBucket, numBitsPerEntry)]
+    this(new byte[calculateDataLength(numBuckets, numEntriesPerBucket, numBitsPerEntry)]
         , numBuckets
         , numEntriesPerBucket
         , numBitsPerEntry
@@ -61,12 +61,12 @@ class CuckooTable {
     );
   }
 
-  CuckooTable(final long[] data, long numBuckets, int numEntriesPerBucket,
+  CuckooTable(final byte[] data, long numBuckets, int numEntriesPerBucket,
               int numBitsPerEntry, long checksum) {
     this(data, 0L, checksum, numBuckets, numEntriesPerBucket, numBitsPerEntry);
   }
 
-  public CuckooTable(final long[] data, long size, long checksum, long numBuckets,
+  public CuckooTable(final byte[] data, long size, long checksum, long numBuckets,
                      int numEntriesPerBucket, int numBitsPerEntry) {
     this.data = data;
     this.size = size;
@@ -86,11 +86,13 @@ class CuckooTable {
     checkArgument(numEntriesPerBucket > 0, "numEntriesPerBucket (%s) must be > 0",
         numEntriesPerBucket);
     checkArgument(numBitsPerEntry > 0, "numBitsPerEntry (%s) must be > 0", numBitsPerEntry);
+    checkArgument(numBitsPerEntry == 8);
 
-    return Ints.checkedCast(LongMath.divide(
-        LongMath.checkedMultiply(numBuckets,
-            LongMath.checkedMultiply(numEntriesPerBucket, numBitsPerEntry)),
-        Long.SIZE, RoundingMode.CEILING));
+//    return Ints.checkedCast(LongMath.divide(
+//        LongMath.checkedMultiply(numBuckets,
+//            LongMath.checkedMultiply(numEntriesPerBucket, numBitsPerEntry)),
+//        Long.SIZE, RoundingMode.CEILING));
+    return Ints.checkedCast(LongMath.checkedMultiply(numBuckets, numEntriesPerBucket));
   }
 
   public int findEntry(int value, long bucket) {
@@ -117,8 +119,10 @@ class CuckooTable {
   }
 
   public int readEntry(long bucket, int entry) {
-    return readBits(
-        data, bitOffset(bucket, entry, numEntriesPerBucket, numBitsPerEntry), numBitsPerEntry);
+//    return readBits(
+//        data, bitOffset(bucket, entry, numEntriesPerBucket, numBitsPerEntry), numBitsPerEntry);
+    int offset = (int) bucket * numEntriesPerBucket + entry;
+    return data[offset] & 0xff;
   }
 
   public boolean swapAnyEntry(int valueIn, int valueOut, long bucket) {
@@ -133,8 +137,11 @@ class CuckooTable {
   }
 
   int swapEntry(int value, long bucket, int entry) {
-    final int kicked = writeBits(value, data,
-        bitOffset(bucket, entry, numEntriesPerBucket, numBitsPerEntry), numBitsPerEntry);
+//    final int kicked = writeBits(value, data,
+//        bitOffset(bucket, entry, numEntriesPerBucket, numBitsPerEntry), numBitsPerEntry);
+    int offset = (int) bucket * numEntriesPerBucket + entry;
+    final int kicked = data[offset] & 0xff;
+    data[offset] = (byte) value;
     checksum += value - kicked;
 
     if ((EMPTY_ENTRY == value) && (EMPTY_ENTRY != kicked)) {
@@ -145,63 +152,6 @@ class CuckooTable {
     assert size >= 0 : "Hmm - that's strange. CuckooTable size [" + size + "] shouldn't be < 0l";
 
     return kicked;
-  }
-
-  static long bitOffset(long bucket, int entry, int numEntriesPerBucket, int numBitsPerEntry) {
-    return (bucket * numEntriesPerBucket + entry) * numBitsPerEntry;
-  }
-
-  static int dataIndex(long bit) {
-    return (int) (bit >>> 6);
-  }
-
-  @VisibleForTesting
-  static int readBits(final long[] data, long bit, int len) {
-    final int startLower = (int) (bit % Long.SIZE);
-    final int lenLower = Math.min(Long.SIZE - startLower, len);
-    final int lenUpper = Math.max(len - lenLower, 0);
-
-    final int indexUpper = dataIndex(bit + len);
-
-    final long lower = (data[dataIndex(bit)] & mask(startLower, lenLower)) >>> startLower;
-    final long upper = indexUpper < data.length ?
-        (data[indexUpper] & mask(0, lenUpper)) << lenLower : 0x00L;
-
-    return (int) (lower | upper);
-  }
-
-  @VisibleForTesting
-  static int writeBits(int bits, final long[] data, long bit, int len) {
-    final int ret = readBits(data, bit, len);
-
-    final long bitsl = ((long) bits) & 0x00000000FFFFFFFFL; // upcast without carrying the sign
-
-    final int startLower = (int) (bit % Long.SIZE);
-    final int lenLower = Math.min(Long.SIZE - startLower, len);
-    final int lenUpper = Math.max(len - lenLower, 0);
-
-    final long maskLowerKeep = ~(mask(0, lenLower) << startLower);
-    final long maskUpperKeep = mask(lenUpper, Long.SIZE - lenUpper);
-
-    final long bitsLower = (bitsl << startLower) & ~maskLowerKeep;
-    final long bitsUpper = (bitsl >>> (len - lenUpper)) & ~maskUpperKeep;
-
-    final int indexLower = dataIndex(bit);
-    final int indexUpper = dataIndex(bit + len - 1);
-
-    final long dataLower = (data[indexLower] & maskLowerKeep) | bitsLower;
-    data[indexLower] = dataLower;
-
-    if (indexLower != indexUpper) {
-      final long dataUpper = (data[indexUpper] & maskUpperKeep) | bitsUpper;
-      data[indexUpper] = dataUpper;
-    }
-
-    return ret;
-  }
-
-  static long mask(int start, int len) {
-    return (len <= 0) ? 0L : (0x8000000000000000L >> (len - 1)) >>> (Long.SIZE - (start + len));
   }
 
   @Override
@@ -284,7 +234,7 @@ class CuckooTable {
   }
 
   public void clear() {
-    Arrays.fill(data, 0L);
+    Arrays.fill(data, (byte) 0);
     size = 0L;
   }
 }
