@@ -87,6 +87,69 @@ object Hash {
     )
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+import com.twitter.{algebird => t}
+
+case class BloomFilter[T] private (bf: t.BF[T], capacity: Long) extends ProbFilter[T] {
+  override val size: Long = bf.size.estimate
+  override val bytes: Long = scala.math.ceil(bf.width / 8).toInt
+  override val fpp: Double =
+    if (bf.density > 0.95)
+      1.0
+    else
+      scala.math
+        .pow(1 - scala.math.exp(-bf.numHashes * bf.size.estimate * 1.1 / bf.width), bf.numHashes)
+  override val fnp: Double = 0.0
+
+  override def contains(item: T): Boolean = bf.maybeContains(item)
+}
+
+object BloomFilter extends ProbFilterCompanion[BloomFilter] {
+  override def builder(capacity: Long, fpp: Double): ProbFilterBuilder[BloomFilter] =
+    new ProbFilterBuilder[BloomFilter] {
+      override def build[T](data: Iterable[T])(implicit hash: Hash[T]): BloomFilter[T] = {
+        val monoid = t.BloomFilter[T](capacity.toInt, fpp)(hash.algebird)
+        val bf = monoid.create(data.iterator)
+        BloomFilter(bf, capacity)
+      }
+    }
+
+  override def coder[T]: Coder[BloomFilter[T]] = ???
+}
+
+import com.google.common.{hash => g}
+
+case class GBloomFilter[T] private (bf: g.BloomFilter[T], capacity: Long) extends ProbFilter[T] {
+  override val size: Long = bf.approximateElementCount()
+  override val bytes: Long = {
+    var n = 0L
+    val os = new java.io.OutputStream {
+      override def write(b: Int): Unit = n += 1
+    }
+    bf.writeTo(os)
+    n
+  }
+  override val fpp: Double = bf.expectedFpp()
+  override val fnp: Double = 0.0
+
+  override def contains(item: T): Boolean = bf.mightContain(item)
+}
+
+object GBloomFilter extends ProbFilterCompanion[GBloomFilter] {
+  override def builder(capacity: Long, fpp: Double): ProbFilterBuilder[GBloomFilter] =
+    new ProbFilterBuilder[GBloomFilter] {
+      override def build[T](data: Iterable[T])(implicit hash: Hash[T]): GBloomFilter[T] = {
+        val bf = g.BloomFilter.create(hash.guava, capacity, fpp)
+        data.foreach(bf.put)
+        GBloomFilter(bf, capacity)
+      }
+    }
+
+  override def coder[T]: Coder[GBloomFilter[T]] = ???
+}
+////////////////////////////////////////////////////////////////////////////////
+
 /**
  * A conventional Cuckoo Filter.
  *
@@ -108,7 +171,8 @@ object CuckooFilter extends ProbFilterCompanion[CuckooFilter] {
       override def build[T](data: Iterable[T])(implicit hash: Hash[T]): CuckooFilter[T] = {
         val cf = JCF.create(hash.guava, capacity, fpp)
         data.foreach { i =>
-          require(cf.add(i), s"Failed to add item at size ${cf.sizeLong()}")
+//          require(cf.add(i), s"Failed to add item at size ${cf.sizeLong()}")
+          if (!cf.add(i)) println(s"Failed to add item at size ${cf.sizeLong()}")
         }
         CuckooFilter(cf)
       }
@@ -195,6 +259,8 @@ case class OneSidedCuckooFilter[T](cf: JCF[T], overflow: Option[JCF[T]]) extends
   override def contains(item: T): Boolean = cf.contains(item) || overflow.exists(_.contains(item))
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 object QuotientFilter extends ProbFilterCompanion[QuotientFilter] {
   override def builder(capacity: Long, fpp: Double): ProbFilterBuilder[QuotientFilter] =
     new ProbFilterBuilder[QuotientFilter] {
@@ -216,48 +282,4 @@ case class QuotientFilter[T](qf: JQF, toBytes: T => Array[Byte]) extends ProbFil
   override val fnp: Double = 0.0
 
   override def contains(item: T): Boolean = qf.maybeContains(toBytes(item))
-}
-
-// scalastyle:off
-object ProbFilterTest {
-  private val targetCapacity = 100
-  private val targetFpp = 0.05
-
-  def test[PF[T] <: ProbFilter[T]](b: ProbFilterBuilder[PF]): Unit = {
-    val data = (1 to targetCapacity).map(_.toString)
-    val f = b.build(data)
-    println("=" * 50)
-    println(s"Testing ${f.getClass.getSimpleName}")
-    println(s"target capacity=$targetCapacity")
-    println(s"target fpp=$targetFpp")
-    println(s"bytes=${f.bytes}")
-    println(s"capacity=${f.capacity}")
-    println(s"size=${f.size}")
-    println(s"fpp=${f.fpp}")
-    println(s"fnp=${f.fnp}")
-
-    var fn = 0
-    data.foreach { s =>
-      if (!f.contains(s)) {
-        fn += 1
-      }
-    }
-    var fp = 0
-    (targetCapacity + 1 to targetCapacity * 2).map(_.toString).foreach { s =>
-      if (f.contains(s)) {
-        fp += 1
-      }
-    }
-    val fpp = fp.toDouble / targetCapacity
-    val fnp = fn.toDouble / f.size
-    println(s"actual fpp=$fpp")
-    println(s"actual fnp=$fnp")
-  }
-
-  def main(args: Array[String]): Unit = {
-    test(CuckooFilter.builder(targetCapacity, targetFpp))
-    test(OneSidedCuckooFilter.builder(targetCapacity, targetFpp))
-    test(TwoSidedCuckooFilter.builder(targetCapacity, targetFpp))
-    test(QuotientFilter.builder(targetCapacity, targetFpp))
-  }
 }
