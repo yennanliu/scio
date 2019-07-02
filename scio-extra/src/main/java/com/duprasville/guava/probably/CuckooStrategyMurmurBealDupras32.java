@@ -18,7 +18,10 @@ import com.google.common.hash.Funnel;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+import net.jpountz.xxhash.XXHash64;
+import net.jpountz.xxhash.XXHashFactory;
 
+import java.nio.charset.Charset;
 import java.util.Random;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -39,7 +42,7 @@ class CuckooStrategyMurmurBealDupras32 extends AbstractCuckooStrategy implements
   }
 
   public <T> CuckooHasher.Hash hash(T object, Funnel<? super T> funnel, CuckooTable table) {
-    final long hash64 = hash(object, funnel).asLong();
+    final long hash64 = hash(object, funnel);
     final int hash1 = hash1(hash64);
     final int hash2 = hash2(hash64);
     final int fingerprint = fingerprint(hash2, table.numBitsPerEntry);
@@ -55,7 +58,7 @@ class CuckooStrategyMurmurBealDupras32 extends AbstractCuckooStrategy implements
   }
 
   public <T> boolean add(T object, Funnel<? super T> funnel, CuckooTable table) {
-    final long hash64 = hash(object, funnel).asLong();
+    final long hash64 = hash(object, funnel);
     final int hash1 = hash1(hash64);
     final int hash2 = hash2(hash64);
     final int fingerprint = fingerprint(hash2, table.numBitsPerEntry);
@@ -76,7 +79,7 @@ class CuckooStrategyMurmurBealDupras32 extends AbstractCuckooStrategy implements
   }
 
   public <T> boolean remove(T object, Funnel<? super T> funnel, CuckooTable table) {
-    final long hash64 = hash(object, funnel).asLong();
+    final long hash64 = hash(object, funnel);
     final int hash1 = hash1(hash64);
     final int hash2 = hash2(hash64);
     final int fingerprint = fingerprint(hash2, table.numBitsPerEntry);
@@ -87,7 +90,7 @@ class CuckooStrategyMurmurBealDupras32 extends AbstractCuckooStrategy implements
   }
 
   public <T> boolean contains(T object, Funnel<? super T> funnel, CuckooTable table) {
-    final long hash64 = hash(object, funnel).asLong();
+    final long hash64 = hash(object, funnel);
     final int hash1 = hash1(hash64);
     final int hash2 = hash2(hash64);
     final int fingerprint = fingerprint(hash2, table.numBitsPerEntry);
@@ -96,8 +99,12 @@ class CuckooStrategyMurmurBealDupras32 extends AbstractCuckooStrategy implements
     return table.hasEntry(fingerprint, index1) || table.hasEntry(fingerprint, index2);
   }
 
-  <T> HashCode hash(final T object, final Funnel<? super T> funnel) {
-    return hashFunction.hashObject(object, funnel);
+  private XXHash64 xxh = XXHashFactory.fastestInstance().hash64();
+
+  <T> long hash(final T object, final Funnel<? super T> funnel) {
+//    return hashFunction.hashObject(object, funnel);
+    byte[] b = ((String) object).getBytes(Charset.defaultCharset());
+    return xxh.hash(b, 0, b.length, 0);
   }
 
   int hash1(long hash64) {
