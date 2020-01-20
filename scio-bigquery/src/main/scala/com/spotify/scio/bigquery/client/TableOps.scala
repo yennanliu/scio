@@ -29,11 +29,7 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 import org.apache.beam.sdk.extensions.gcp.options.GcsOptions
-import org.apache.beam.sdk.io.gcp.bigquery.{
-  BigQueryAvroUtilsWrapper,
-  BigQueryOptions,
-  PatchedBigQueryTableRowIterator
-}
+import org.apache.beam.sdk.io.gcp.bigquery.{BigQueryAvroUtilsWrapper, BigQueryOptions}
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.{CreateDisposition, WriteDisposition}
 import org.apache.beam.sdk.io.gcp.{bigquery => bq}
 import org.apache.beam.sdk.options.PipelineOptionsFactory
