@@ -29,9 +29,12 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 import org.apache.beam.sdk.extensions.gcp.options.GcsOptions
-import org.apache.beam.sdk.io.gcp.bigquery.BigQueryAvroUtilsWrapper
+import org.apache.beam.sdk.io.gcp.bigquery.{
+  BigQueryAvroUtilsWrapper,
+  BigQueryOptions,
+  PatchedBigQueryTableRowIterator
+}
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.{CreateDisposition, WriteDisposition}
-import org.apache.beam.sdk.io.gcp.bigquery.BigQueryOptions
 import org.apache.beam.sdk.io.gcp.{bigquery => bq}
 import org.apache.beam.sdk.options.PipelineOptionsFactory
 import org.joda.time.Instant
@@ -63,14 +66,15 @@ final private[client] class TableOps(client: Client) {
   /** Get rows from a table. */
   def rows(table: TableReference): Iterator[TableRow] =
     new Iterator[TableRow] {
-      private val iterator = bq.PatchedBigQueryTableRowIterator.fromTable(table, client.underlying)
+      private val underlying =
+        bq.PatchedBigQueryTableRowIterator.fromTable(table, client.underlying)
       private var _isOpen = false
       private var _hasNext = false
 
       private def init(): Unit = if (!_isOpen) {
-        iterator.open()
+        underlying.open()
         _isOpen = true
-        _hasNext = iterator.advance()
+        _hasNext = underlying.advance()
       }
 
       override def hasNext: Boolean = {
@@ -81,8 +85,8 @@ final private[client] class TableOps(client: Client) {
       override def next(): TableRow = {
         init()
         if (_hasNext) {
-          val r = iterator.getCurrent
-          _hasNext = iterator.advance()
+          val r = underlying.getCurrent
+          _hasNext = underlying.advance()
           r
         } else {
           throw new NoSuchElementException
