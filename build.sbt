@@ -90,6 +90,7 @@ val bigQueryStorageVersion = "0.79.0-alpha"
 val httpCoreVersion = "4.4.11"
 val googleCloudSpannerVersion = "1.6.0"
 val datastoreV1ProtoClientVersion = "1.6.0"
+val scalaCollectionCompatVersion = "2.1.3"
 
 def scalaVersionSpecificFolders(srcBaseDir: java.io.File, scalaVersion: String) =
   CrossVersion.partialVersion(scalaVersion) match {
@@ -459,7 +460,8 @@ lazy val `scio-core`: Project = project
       "com.github.ben-manes.caffeine" % "caffeine" % caffeineVersion % "provided",
       "joda-time" % "joda-time" % jodaTimeVersion,
       "org.slf4j" % "slf4j-api" % slf4jVersion,
-      "org.scalatest" %% "scalatest" % scalatestVersion % Test
+      "org.scalatest" %% "scalatest" % scalatestVersion % Test,
+      "org.scala-lang.modules" %% "scala-collection-compat" % scalaCollectionCompatVersion
     ),
     magnoliaDependencies
   )
