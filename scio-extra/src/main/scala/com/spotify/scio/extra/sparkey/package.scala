@@ -17,7 +17,6 @@
 
 package com.spotify.scio.extra
 
-import java.nio.charset.Charset
 import java.util
 import java.util.{UUID, List => JList}
 import java.lang.{Iterable => JIterable}
@@ -26,6 +25,12 @@ import com.spotify.scio.util.Cache
 import com.spotify.scio.ScioContext
 import com.spotify.scio.annotations.experimental
 import com.spotify.scio.coders.{Coder, CoderMaterializer}
+import com.spotify.scio.extra.sparkey.instances.{
+  CachedStringSparkeyReader,
+  SparkeyReaderInstances,
+  StringSparkeyReader,
+  TypedSparkeyReader
+}
 import com.spotify.scio.values.{SCollection, SideInput}
 import com.spotify.sparkey.{IndexHeader, LogHeader, SparkeyReader}
 import org.apache.beam.sdk.transforms.{DoFn, Reify, View}
@@ -118,7 +123,7 @@ import scala.util.hashing.MurmurHash3
  *   .toSCollection
  * }}}
  */
-package object sparkey {
+package object sparkey extends SparkeyReaderInstances {
 
   /** Enhanced version of [[ScioContext]] with Sparkey methods. */
   implicit class SparkeyScioContext(private val self: ScioContext) extends AnyVal {
@@ -259,7 +264,7 @@ package object sparkey {
                     xs.asJava
                   )
               }
-              .groupBy(_ => Unit)
+              .groupBy(_ => ())
               .map(_ => uri: SparkeyUri)
           }
       }
@@ -410,133 +415,11 @@ package object sparkey {
         .map(reader => new CachedStringSparkeyReader(reader, cache))
   }
 
-  /**
-   * A wrapper class around SparkeyReader that allows the reading of multiple Sparkey files,
-   * sharded by their keys (via MurmurHash3). At most 32,768 Sparkey files are supported.
-   * @param sparkeys a map of shard ID to sparkey reader
-   * @param numShards the total count of shards used (needed for keying as some shards may be empty)
-   */
-  class ShardedSparkeyReader(val sparkeys: Map[Short, SparkeyReader], val numShards: Short)
-      extends SparkeyReader {
-    def hashKey(arr: Array[Byte]): Short = (MurmurHash3.bytesHash(arr, 1) % numShards).toShort
-
-    def hashKey(str: String): Short = hashKey(str.getBytes)
-
-    override def getAsString(key: String): String = {
-      val hashed = hashKey(key)
-      if (sparkeys.contains(hashed)) {
-        sparkeys(hashed).getAsString(key)
-      } else {
-        null
-      }
-    }
-
-    override def getAsByteArray(key: Array[Byte]): Array[Byte] = {
-      val hashed = hashKey(key)
-      if (sparkeys.contains(hashed)) {
-        sparkeys(hashed).getAsByteArray(key)
-      } else {
-        null
-      }
-    }
-
-    override def getAsEntry(key: Array[Byte]): SparkeyReader.Entry = {
-      val hashed = hashKey(key)
-      if (sparkeys.contains(hashed)) {
-        sparkeys(hashed).getAsEntry(key)
-      } else {
-        null
-      }
-    }
-
-    override def getIndexHeader: IndexHeader =
-      throw new NotImplementedError("ShardedSparkeyReader does not support getIndexHeader.")
-
-    override def getLogHeader: LogHeader =
-      throw new NotImplementedError("ShardedSparkeyReader does not support getLogHeader.")
-
-    override def duplicate(): SparkeyReader =
-      new ShardedSparkeyReader(sparkeys.map { case (k, v) => (k, v.duplicate) }, numShards)
-
-    override def close(): Unit = sparkeys.values.foreach(_.close())
-
-    override def iterator(): util.Iterator[SparkeyReader.Entry] =
-      sparkeys.values.map(_.iterator.asScala).reduce(_ ++ _).asJava
-  }
-
-  /** Enhanced version of `SparkeyReader` that mimics a `Map`. */
-  implicit class RichStringSparkeyReader(val self: SparkeyReader) extends Map[String, String] {
-    override def get(key: String): Option[String] =
-      Option(self.getAsString(key))
-    override def iterator: Iterator[(String, String)] =
-      self.iterator.asScala.map(e => (e.getKeyAsString, e.getValueAsString))
-
-    override def +[B1 >: String](kv: (String, B1)): Map[String, B1] =
-      throw new NotImplementedError("Sparkey-backed map; operation not supported.")
-    override def -(key: String): Map[String, String] =
-      throw new NotImplementedError("Sparkey-backed map; operation not supported.")
-  }
-
   private class SparkeySideInput(val view: PCollectionView[SparkeyUri])
       extends SideInput[SparkeyReader] {
     override def updateCacheOnGlobalWindow: Boolean = false
     override def get[I, O](context: DoFn[I, O]#ProcessContext): SparkeyReader =
       context.sideInput(view).getReader
-  }
-
-  /**
-   * A wrapper around `SparkeyReader` that includes an in-memory Caffeine cache.
-   */
-  class CachedStringSparkeyReader(val sparkey: SparkeyReader, val cache: Cache[String, String])
-      extends RichStringSparkeyReader(sparkey) {
-    override def get(key: String): Option[String] =
-      Option(cache.get(key, sparkey.getAsString(key)))
-
-    def close(): Unit = {
-      sparkey.close()
-      cache.invalidateAll()
-    }
-  }
-
-  /**
-   * A wrapper around `SparkeyReader` that includes both a decoder (to map from each byte array
-   * to a JVM type) and an optional in-memory cache.
-   */
-  class TypedSparkeyReader[T](
-    val sparkey: SparkeyReader,
-    val decoder: Array[Byte] => T,
-    val cache: Cache[String, T] = Cache.noOp
-  ) extends Map[String, T] {
-    private def stringKeyToBytes(key: String): Array[Byte] = key.getBytes(Charset.defaultCharset())
-
-    private def loadValueFromSparkey(key: String): T = {
-      val value = sparkey.getAsByteArray(stringKeyToBytes(key))
-      if (value == null) {
-        null.asInstanceOf[T]
-      } else {
-        decoder(value)
-      }
-    }
-
-    override def get(key: String): Option[T] =
-      Option(cache.get(key, loadValueFromSparkey(key)))
-
-    override def iterator: Iterator[(String, T)] =
-      sparkey.iterator.asScala.map { e =>
-        val key = e.getKeyAsString
-        val value = cache.get(key).getOrElse(decoder(e.getValue))
-        (key, value)
-      }
-
-    override def +[B1 >: T](kv: (String, B1)): Map[String, B1] =
-      throw new NotImplementedError("Sparkey-backed map; operation not supported.")
-    override def -(key: String): Map[String, T] =
-      throw new NotImplementedError("Sparkey-backed map; operation not supported.")
-
-    def close(): Unit = {
-      sparkey.close()
-      cache.invalidateAll()
-    }
   }
 
   sealed trait SparkeyWritable[K, V] extends Serializable {
