@@ -140,16 +140,6 @@ val beamSDKIODependencies = Def.settings(
   )
 )
 
-val magnoliaDependencies = Def.settings(
-  libraryDependencies ++= Seq(
-    if (scalaBinaryVersion.value == "2.11") {
-      "me.lyh" %% "magnolia" % "0.10.1-jto"
-    } else {
-      "com.propensive" %% "magnolia" % magnoliaVersion
-    }
-  )
-)
-
 def previousVersion(currentVersion: String): Option[String] = {
   val Version = """(\d+)\.(\d+)\.(\d+).*""".r
   val Version(x, y, z) = currentVersion
@@ -461,9 +451,9 @@ lazy val `scio-core`: Project = project
       "joda-time" % "joda-time" % jodaTimeVersion,
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.scalatest" %% "scalatest" % scalatestVersion % Test,
-      "org.scala-lang.modules" %% "scala-collection-compat" % scalaCollectionCompatVersion
-    ),
-    magnoliaDependencies
+      "org.scala-lang.modules" %% "scala-collection-compat" % scalaCollectionCompatVersion,
+      "com.propensive" %% "magnolia" % magnoliaVersion
+    )
   )
   .dependsOn(
     `scio-schemas` % "test->test",
@@ -546,9 +536,9 @@ lazy val `scio-macros`: Project = project
       "com.chuusai" %% "shapeless" % shapelessVersion,
       "com.esotericsoftware" % "kryo-shaded" % kryoVersion,
       "org.apache.beam" % "beam-sdks-java-extensions-sql" % beamVersion,
-      "org.apache.avro" % "avro" % avroVersion
-    ),
-    magnoliaDependencies
+      "org.apache.avro" % "avro" % avroVersion,
+      "com.propensive" %% "magnolia" % magnoliaVersion
+    )
   )
 
 lazy val `scio-avro`: Project = project
@@ -617,16 +607,7 @@ lazy val `scio-bigquery`: Project = project
       // DataFlow testing requires junit and hamcrest
       "org.hamcrest" % "hamcrest-core" % hamcrestVersion % "test,it",
       "org.hamcrest" % "hamcrest-library" % hamcrestVersion % "test,it"
-    ),
-    // Workaround for https://github.com/spotify/scio/issues/2308
-    (Compile / doc) := Def.taskDyn {
-      val default = (Compile / doc).taskValue
-      if (scalaBinaryVersion.value == "2.11") {
-        (Compile / doc / target).toTask
-      } else {
-        Def.task(default.value)
-      }
-    }.value
+    )
   )
   .dependsOn(
     `scio-core` % "compile;it->it"
